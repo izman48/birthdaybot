@@ -4,10 +4,11 @@ import json
 import discord
 from discord.ext import tasks, commands
 from dotenv import load_dotenv
-from datetime import date, datetime
+from datetime import date as dt
 import asyncio
 from contextlib import suppress
 import csv
+from threading import Thread
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -29,11 +30,10 @@ client = discord.Client()
 class BirthdayBot(commands.Bot):
     async def on_ready(self):
         print(f"{self.user.display_name} has connected to Discord!")
-        self.get_file_location()
         self.initialize_birthdays()
         self._loop = None
         self.is_started = False
-        self.time = 1000
+        self.time = 10
         self.guild = discord.utils.get(self.guilds, name=GUILD)
         self.birthday_role = [
             role for role in self.guild.roles if role.id == BIRTHDAY_ROLE
@@ -66,6 +66,7 @@ class BirthdayBot(commands.Bot):
 
     async def _run(self):
         while True:
+            self.write_to_file()
             await self.birthday_check()
             await asyncio.sleep(self.time)
 
@@ -73,7 +74,7 @@ class BirthdayBot(commands.Bot):
         for member in self.guild.members:
             await member.remove_roles(self.birthday_role)
 
-        today = date.today().strftime("%d/%m")
+        today = dt.today().strftime("%d/%m")
         channel = self.get_channel(BIRTHDAY_CHANNEL)
 
         birthday_child = [
@@ -129,19 +130,19 @@ class BirthdayBot(commands.Bot):
                     user = author.id
                     date = words[2]
                 # IF TODAY IS BIRTHDAY GET TODAYS DATE
-                if words[3] == "today":
-                    date = date.today().strftime("%d/%m")
+                if date == "today":
+                    date = dt.today().strftime("%d/%m")
                 if self.validate(date):
                     for member in BIRTHDAYS:
                         if member["discordID"] == user:
                             print(member["discordID"])
                             self.remove_member(user)
                             break
-                    self.write_to_file(user, date)
+                    BIRTHDAYS.append({"discordID": user, "date": date})
+
                     response = "added user"
                 else:
                     response = "invalid date"
-                await message.channel.send(response)
 
             if words[1] == "remove":
                 if str(author.id) in S_USERS or bool(set(role_ids) & set(S_ROLES)):
@@ -157,18 +158,19 @@ class BirthdayBot(commands.Bot):
                     response = "you can no longer edit your birthday, get an admin to do that for you"
             if words[1] == "wish":
                 await self.birthday_check()
+                return
 
             await message.channel.send(response)
 
     def remove_member(self, discordID):
         index = -1
-        for i in range(BIRTHDAYS):
+        for i in range(len(BIRTHDAYS)):
             member = BIRTHDAYS[i]
             if discordID == member["discordID"]:
                 index = i
         if index == -1:
             return
-        BIRTHDAYS.remove(index)
+        BIRTHDAYS.pop(index)
 
         # UPDATE CSV FILE
 
@@ -199,34 +201,17 @@ class BirthdayBot(commands.Bot):
                 BIRTHDAYS.append({"discordID": data[0], "date": data[1].rstrip("\n")})
         f.close()
 
-    def write_to_file(self, user_id, birthday):
+    def write_to_file(self):
 
-        f = open(self.BIRTHDAY_LOCATION, "a")
-        # validate user_id
-        f.write(f"\n{user_id},{birthday}")
-        f.close()
-        self.initialize_birthdays()
+        with open(self.BIRTHDAY_LOCATION, "w") as f:
+            f.write("discordid,date\n")
+            for birthday in BIRTHDAYS:
+                f.write(f'\n{birthday["discordID"]},{birthday["date"]}')
 
     def initialize_birthdays(self):
 
         self.read_from_file(self.BIRTHDAY_LOCATION)
         print(f"{self.user} has read birthdays from {BIRTHDAY_FILE}!")
-
-    def get_file_location(self):
-        __location__ = os.path.realpath(
-            os.path.join(os.getcwd(), os.path.dirname(__file__))
-        )
-        self.BIRTHDAY_LOCATION = os.path.join(__location__, BIRTHDAY_FILE)
-        self.BIRTHDAY_BACKUP_LOCATION = os.path.join(__location__, BIRTHDAY_BACKUP_FILE)
-
-    def switch_files(self):
-        temp = self.BIRTHDAY_LOCATION
-        self.BIRTHDAY_LOCATION = self.BIRTHDAY_BACKUP_LOCATION
-
-        self.BIRTHDAY_BACKUP_LOCATION = temp
-
-        f = open(self.BIRTHDAY_BACKUP_LOCATION, "w+")
-        f.close()
 
     def validate(self, date):
         numbers = date.split("/")
