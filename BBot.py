@@ -17,7 +17,9 @@ import asyncio
 from contextlib import suppress
 import discord
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
+from typing import Optional
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -31,49 +33,50 @@ BIRTHDAY_BACKUP_LOCATION = ""
 BIRTHDAY_CHANNEL = int(os.getenv("BIRTHDAY_WISH_CHANNEL"))
 BIRTHDAY_ROLE = int(os.getenv("BIRTHDAY_ROLE"))
 REST_TIME = int(os.getenv("RESET_TIME"))
+MY_GUILD = discord.Object(id=653693334229090304)
 
 
-client = discord.Client()
+class BirthdayBot(discord.Client):
+    def __init__(self, *, intents: discord.Intents):
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+        self.birthdays = []
+        self.initialize_birthdays()
+        self._loop = None
+        self.is_started = False
+        # self.time = REST_TIME
+        self.time = 10
 
-
-class BirthdayBot(commands.Bot):
-    def birthday_exists_check(self, author):
-        value = any(x["discordID"] == author for x in self.birthdays)
-        print(value, self.birthdays)
+    def birthday_exists_check(self, author_id):
+        value = any(x["discordID"] == author_id for x in self.birthdays)
         return value
 
     def check_admin(self, author):
         role_ids = (str(role.id) for role in author.roles)
         return str(author.id) in S_USERS or any(map(lambda x: x in role_ids, S_ROLES))
 
-    def add_birthday(self, user, date):
+    def add_birthday(self, user_id, date):
         if date == "today":
             date = dt.today().strftime("%d/%m")
         if self.validate(date):
-            if self.birthday_exists_check(user):
+            if self.birthday_exists_check(user_id):
                 return "```User already in birthday list```"
-            self.birthdays.append({"discordID": user, "date": date})
+            self.birthdays.append({"discordID": user_id, "date": date})
 
-            response = "```added user```"
+            response = f"```added user with id {user_id}```"
         else:
             response = "```invalid date```"
         return response
 
     def remove_birthday(self, discordID):
         temp = self.birthdays
-        t2 = not self.birthday_exists_check(discordID)
-        print(t2)
-        # breakpoint()
         if not self.birthday_exists_check(discordID):
             return f"```Can't find user with id: {discordID}```"
 
         self.birthdays = [
             birthday for birthday in temp if birthday["discordID"] != discordID
         ]
-        print(temp)
         return f"```removed {discordID} from birthday file```"
-
-        # self.birthdays = temp
 
     def read_from_file(self, filename):
         with open(filename, "r") as f:
@@ -99,14 +102,9 @@ class BirthdayBot(commands.Bot):
         numbers = date.split("/")
         return len(numbers) == 2 and int(numbers[0]) <= 31 or int(numbers[1]) <= 12
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.birthdays = []
-        self.initialize_birthdays()
-        self._loop = None
-        self.is_started = False
-        # self.time = REST_TIME
-        self.time = 10
+    async def setup_hook(self):
+        self.tree.copy_global_to(guild=MY_GUILD)
+        await self.tree.sync(guild=MY_GUILD)
 
     async def on_ready(self):
         print(f"{self.user.display_name} has connected to Discord!")
@@ -180,9 +178,6 @@ class BirthdayBot(commands.Bot):
 
             if words[0] == f"<@{self.user.id}>":
                 if self.check_admin(author):
-                    # admin stuff
-                    # IF A VALID USER TRIES TO SET A BIRTHDAY ALLOW THEM TO
-                    # ex: @bbot add @izman48 19/06
                     if len(words) == 4 and words[1] == "add":
                         user = next(mentions)
                         date = words[3]
@@ -224,5 +219,48 @@ class BirthdayBot(commands.Bot):
 
 intents = discord.Intents.default()
 intents.members = True
-bBot = BirthdayBot(command_prefix="!", intents=intents)
+bBot = BirthdayBot(intents=intents)
+
+
+@bBot.tree.command()
+@app_commands.describe(
+    user="user who we add the bday to",
+    date="The date for you birthday in day/month format, ex: 19/06",
+)
+async def add(
+    interaction: discord.Interaction, date: str, user: Optional[discord.User] = None
+):
+    """Adds two numbers together."""
+    try:
+        if user is not None:
+            if bBot.check_admin(interaction.user):
+                response = bBot.add_birthday(str(user.id), date)
+            else:
+                response = "Not sufficient perms, speak to an admin"
+        else:
+            response = bBot.add_birthday(str(interaction.user.id), date)
+
+    except Exception as exc:
+        response = "Invalid command"
+        print(exc)
+    await interaction.response.send_message(f"{response}", ephemeral=True)
+
+
+@bBot.tree.command()
+@app_commands.describe(
+    user="Who do you wanna remove from the birthday list",
+)
+async def remove(interaction: discord.Interaction, user: discord.User):
+    """Adds two numbers together."""
+    try:
+        if bBot.check_admin(interaction.user):
+            response = bBot.remove_birthday(str(user.id))
+        else:
+            response = "Not sufficient perms, speak to an admin"
+    except Exception as exc:
+        response = "Invalid command"
+        print(exc)
+    await interaction.response.send_message(f"{response}", ephemeral=True)
+
+
 bBot.run(TOKEN)
