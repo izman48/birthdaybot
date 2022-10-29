@@ -37,21 +37,38 @@ client = discord.Client()
 
 
 class BirthdayBot(commands.Bot):
-    def author_in_birthdays(self, author):
-        return any(lambda x: x["discordID"] == author.id in self.birthdays)
+    def birthday_exists_check(self, author):
+        value = any(x["discordID"] == author for x in self.birthdays)
+        print(value, self.birthdays)
 
     def check_admin(self, author):
         role_ids = (str(role.id) for role in author.roles)
         return str(author.id) in S_USERS or any(map(lambda x: x in role_ids, S_ROLES))
 
-    def remove_member(self, discordID):
+    def add_birthday(self, user, date):
+        if date == "today":
+            date = dt.today().strftime("%d/%m")
+        if self.validate(date):
+            if self.birthday_exists_check(user):
+                return "```User already in birthday list```"
+            self.birthdays.append({"discordID": user, "date": date})
+
+            response = "```added user```"
+        else:
+            response = "```invalid date```"
+        return response
+
+    def remove_birthday(self, discordID):
         temp = self.birthdays
+        if not self.birthday_exists_check(discordID):
+            return f"```Can't find user with id: {discordID}```"
+
         self.birthdays = [
             birthday for birthday in temp if birthday["discordID"] != discordID
         ]
-        if len(temp) > len(self.birthdays):
-            return f"```removed {discordID} from birthday file```"
-        return f"Can't find user with id: {discordID}"
+        print(temp)
+        return f"```removed {discordID} from birthday file```"
+
         # self.birthdays = temp
 
     def read_from_file(self, filename):
@@ -152,58 +169,44 @@ class BirthdayBot(commands.Bot):
         words = message.content.split(" ")
         if len(words) == 0:
             return
+        try:
 
-        if words[0] == f"<@{self.user.id}>":
-            if self.check_admin(author):
-                # admin stuff
-                # IF A VALID USER TRIES TO SET A BIRTHDAY ALLOW THEM TO
-                # ex: @bbot add @izman48 19/06
-                if len(words) == 4 and words[1] == "add":
-                    user = next(mentions)
-                    date = words[3]
+            if words[0] == f"<@{self.user.id}>":
+                if self.check_admin(author):
+                    # admin stuff
+                    # IF A VALID USER TRIES TO SET A BIRTHDAY ALLOW THEM TO
+                    # ex: @bbot add @izman48 19/06
+                    if len(words) == 4 and words[1] == "add":
+                        user = next(mentions)
+                        date = words[3]
+                        response = self.add_birthday(user, date)
+
+                    if len(words) == 3 and words[1] == "remove":
+                        person = str(next(mentions))
+                        response = self.remove_birthday(person)
+
+                if len(words) == 2 and words[1] == "help":
+                    response = "```Possible commands are add and remove. Ex. @bBot add @izman48 19/06, @bBot remove @izman48```"
+
+                if len(words) == 3 and words[1] == "add":
+                    if self.birthday_exists_check(author.id):
+                        response = "```you can no longer edit your birthday, get an admin to do that for you```"
+                        await message.channel.send(response)
+                        return
+                    user = author.id
+                    date = words[2]
                     response = self.add_birthday(user, date)
 
-                if len(words) == 3 and words[1] == "remove":
-                    person = str(next(mentions))
-                    self.remove_member(person)
-                    response = f"```removed {person} from birthday file```"
+                if len(words) == 2 and words[1] == "remove":
+                    response = "```How did you get your birthday wrong? Get an admin to remove for you```"
 
-            if len(words) == 2 and words[1] == "help":
-                response = "```Possible commands are add and remove. Ex. @bBot add @izman48 19/06, @bBot remove @izman48```"
-
-            if len(words) == 3 and words[1] == "add":
-                if self.author_in_birthdays(author):
-                    response = "```you can no longer edit your birthday, get an admin to do that for you```"
-                    await message.channel.send(response)
+                if len(words) == 2 and words[1] == "wish":
+                    await self.birthday_check()
                     return
-                user = author.id
-                date = words[2]
-                response = self.add_birthday(user, date)
-
-            if len(words) == 2 and words[1] == "remove":
-                response = "```How did you get your birthday wrong? Get an admin to remove for you```"
-
-            if len(words) == 2 and words[1] == "wish":
-                await self.birthday_check()
-                return
-            if response:
-                await message.channel.send(response)
-
-    async def add_birthday(self, user, date):
-        if date == "today":
-            date = dt.today().strftime("%d/%m")
-        if self.validate(date):
-            for member in self.birthdays:
-                if member["discordID"] == user:
-                    print(member["discordID"])
-                    self.remove_member(user)
-                    break
-            self.birthdays.append({"discordID": user, "date": date})
-
-            response = "```added user```"
-        else:
-            response = "```invalid date```"
-        return response
+                if response:
+                    await message.channel.send(response)
+        except Exception as exc:
+            print(exc)
 
 
 intents = discord.Intents.default()
