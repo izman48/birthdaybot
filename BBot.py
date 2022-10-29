@@ -1,14 +1,23 @@
-#!bot.py
+# bot.py
+# pylint:disable=missing-module-docstring
+# pylint:disable=line-too-long
+# pylint:disable=missing-class-docstring
+# pylint:disable=missing-function-docstring
+# pylint:disable=attribute-defined-outside-init
+# pylint:disable=too-many-branches
+# pylint:disable=redefined-outer-name
+# pylint:disable=invalid-name
+# pylint:disable=unspecified-encoding
+# pylint:disable=assigning-non-slot
+
 import os
 import json
-import discord
-from discord.ext import tasks, commands
-from dotenv import load_dotenv
 from datetime import date as dt
 import asyncio
 from contextlib import suppress
-import csv
-from threading import Thread
+import discord
+from discord.ext import commands
+from dotenv import load_dotenv
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -21,18 +30,61 @@ BIRTHDAY_LOCATION = ""
 BIRTHDAY_BACKUP_LOCATION = ""
 BIRTHDAY_CHANNEL = int(os.getenv("BIRTHDAY_WISH_CHANNEL"))
 BIRTHDAY_ROLE = int(os.getenv("BIRTHDAY_ROLE"))
+REST_TIME = int(os.getenv("RESET_TIME"))
 
-BIRTHDAYS = []
 
 client = discord.Client()
 
 
 class BirthdayBot(commands.Bot):
+    def author_in_birthdays(self, author):
+        return any(lambda x: x["discordID"] == author.id in self.birthdays)
+
+    def check_admin(self, author):
+        role_ids = (str(role.id) for role in author.roles)
+        return str(author.id) in S_USERS or any(map(lambda x: x in role_ids, S_ROLES))
+
+    def remove_member(self, discordID):
+        temp = self.birthdays
+        self.birthdays = [
+            birthday for birthday in temp if birthday["discordID"] != discordID
+        ]
+        if len(temp) > len(self.birthdays):
+            return f"```removed {discordID} from birthday file```"
+        return f"Can't find user with id: {discordID}"
+        # self.birthdays = temp
+
+    def read_from_file(self, filename):
+        with open(filename, "r") as f:
+            for line in f.readlines()[1:]:
+                if len(line) > 1:
+                    data = line.split(",")
+
+                    self.birthdays.append(
+                        {"discordID": data[0], "date": data[1].rstrip("\n")}
+                    )
+
+    def write_to_file(self, filename):
+        with open(filename, "w") as f:
+            f.write("discordID,date\n")
+            for birthday in self.birthdays:
+                f.write(f'\n{birthday["discordID"]},{birthday["date"]}')
+
+    def initialize_birthdays(self):
+        self.read_from_file(BIRTHDAY_FILE)
+        print(f"{self.user} has read birthdays from {BIRTHDAY_FILE}!")
+
+    def validate(self, date):
+        numbers = date.split("/")
+        return len(numbers) == 2 and int(numbers[0]) <= 31 or int(numbers[1]) <= 12
+
     async def on_ready(self):
         print(f"{self.user.display_name} has connected to Discord!")
+        self.birthdays = []
         self.initialize_birthdays()
         self._loop = None
         self.is_started = False
+        # self.time = REST_TIME
         self.time = 10
         self.guild = discord.utils.get(self.guilds, name=GUILD)
         self.birthday_role = [
@@ -66,7 +118,7 @@ class BirthdayBot(commands.Bot):
 
     async def _run(self):
         while True:
-            self.write_to_file()
+            self.write_to_file(BIRTHDAY_FILE)
             await self.birthday_check()
             await asyncio.sleep(self.time)
 
@@ -78,11 +130,10 @@ class BirthdayBot(commands.Bot):
         channel = self.get_channel(BIRTHDAY_CHANNEL)
 
         birthday_child = [
-            item["discordID"] for item in BIRTHDAYS if item["date"] == today
+            item["discordID"] for item in self.birthdays if item["date"] == today
         ]
-        # print(*birthday_child, sep='\n')
         for bChild in birthday_child:
-            print(bChild)
+            # print(bChild)
             response = f"@happy <@&{self.birthday_role.id}> <@!{bChild}>"
             await channel.send(response)
             member = self.guild.get_member(int(bChild))
@@ -93,133 +144,66 @@ class BirthdayBot(commands.Bot):
         if author == self.user:
             return
 
-        role_ids = (str(role.id) for role in author.roles)
+        mentions = (
+            member.id for member in message.mentions if member.id != self.user.id
+        )
+        response = ""
 
         words = message.content.split(" ")
+        if len(words) == 0:
+            return
+
         if words[0] == f"<@{self.user.id}>":
-
-            response = "you called"
-
-            if words[1] == "help":
-                response = f"Possible commands are add and remove. Ex. @bBot add @izman48 19/06, @bBot remove @izman48"
-
-            if words[1] == "add":
-                # TOO MANY/NOT ENOUGH ARGUMENTS
-                if len(words) > 4 or len(words) < 2:
-                    response = "Command not recognized, try again like: Ex. @bBot add @izman48 19/06"
-                    await message.channel.send(response)
-                    return
+            if self.check_admin(author):
+                # admin stuff
                 # IF A VALID USER TRIES TO SET A BIRTHDAY ALLOW THEM TO
-                if len(words) == 4 and (
-                    str(author.id) in S_USERS or bool(set(role_ids) & set(S_ROLES))
-                ):
-                    mentions = (
-                        member.id
-                        for member in message.mentions
-                        if member.id != self.user.id
-                    )
+                # ex: @bbot add @izman48 19/06
+                if len(words) == 4 and words[1] == "add":
                     user = next(mentions)
                     date = words[3]
-                # IF SOMEONE TRIES TO SET THEIR OWN BIRTHDAY (CAN ONLY BE DONE IF ITS NOT BEEN SET YET)
-                if len(words) == 3:
-                    for member in BIRTHDAYS:
-                        if member["discordID"] == author.id:
-                            response = "you can no longer edit your birthday, get an admin to do that for you"
-                            await message.channel.send(response)
-                            return
-                    user = author.id
-                    date = words[2]
-                # IF TODAY IS BIRTHDAY GET TODAYS DATE
-                if date == "today":
-                    date = dt.today().strftime("%d/%m")
-                if self.validate(date):
-                    for member in BIRTHDAYS:
-                        if member["discordID"] == user:
-                            print(member["discordID"])
-                            self.remove_member(user)
-                            break
-                    BIRTHDAYS.append({"discordID": user, "date": date})
+                    response = self.add_birthday(user, date)
 
-                    response = "added user"
-                else:
-                    response = "invalid date"
-
-            if words[1] == "remove":
-                if str(author.id) in S_USERS or bool(set(role_ids) & set(S_ROLES)):
-                    mentions = (
-                        member.id
-                        for member in message.mentions
-                        if member.id != self.user.id
-                    )
+                if len(words) == 3 and words[1] == "remove":
                     person = str(next(mentions))
                     self.remove_member(person)
-                    response = "removed them"
-                else:
-                    response = "you can no longer edit your birthday, get an admin to do that for you"
-            if words[1] == "wish":
+                    response = f"```removed {person} from birthday file```"
+
+            if len(words) == 2 and words[1] == "help":
+                response = "```Possible commands are add and remove. Ex. @bBot add @izman48 19/06, @bBot remove @izman48```"
+
+            if len(words) == 3 and words[1] == "add":
+                if self.author_in_birthdays(author):
+                    response = "```you can no longer edit your birthday, get an admin to do that for you```"
+                    await message.channel.send(response)
+                    return
+                user = author.id
+                date = words[2]
+                response = self.add_birthday(user, date)
+
+            if len(words) == 2 and words[1] == "remove":
+                response = "```How did you get your birthday wrong? Get an admin to remove for you```"
+
+            if len(words) == 2 and words[1] == "wish":
                 await self.birthday_check()
                 return
+            if response:
+                await message.channel.send(response)
 
-            await message.channel.send(response)
+    async def add_birthday(self, user, date):
+        if date == "today":
+            date = dt.today().strftime("%d/%m")
+        if self.validate(date):
+            for member in self.birthdays:
+                if member["discordID"] == user:
+                    print(member["discordID"])
+                    self.remove_member(user)
+                    break
+            self.birthdays.append({"discordID": user, "date": date})
 
-    def remove_member(self, discordID):
-        index = -1
-        for i in range(len(BIRTHDAYS)):
-            member = BIRTHDAYS[i]
-            if discordID == member["discordID"]:
-                index = i
-        if index == -1:
-            return
-        BIRTHDAYS.pop(index)
-
-        # UPDATE CSV FILE
-
-        # with open(self.BIRTHDAY_LOCATION, "r") as source:
-        #     reader = csv.reader(source)
-        #     with open(self.BIRTHDAY_BACKUP_LOCATION, "w", newline='') as result:
-        #         writer = csv.writer(result)
-        #         for row in reader:
-        #             if len(row) > 1 and  row[0] != discordID:
-        #                 writer.writerow(row)
-        # self.switch_files()
-
-    def read_from_file(self, filename):
-        print(filename)
-        f = open(filename, "r")
-        lines = f.readlines()
-
-        lines = lines[1:]
-
-        for line in lines:
-            print(len(line))
-
-        for line in lines:
-
-            if len(line) > 1:
-                data = line.split(",")
-
-                BIRTHDAYS.append({"discordID": data[0], "date": data[1].rstrip("\n")})
-        f.close()
-
-    def write_to_file(self):
-
-        with open(self.BIRTHDAY_LOCATION, "w") as f:
-            f.write("discordid,date\n")
-            for birthday in BIRTHDAYS:
-                f.write(f'\n{birthday["discordID"]},{birthday["date"]}')
-
-    def initialize_birthdays(self):
-
-        self.read_from_file(self.BIRTHDAY_LOCATION)
-        print(f"{self.user} has read birthdays from {BIRTHDAY_FILE}!")
-
-    def validate(self, date):
-        numbers = date.split("/")
-
-        if len(numbers) != 2 or int(numbers[0]) > 31 or int(numbers[1]) > 12:
-            return False
-
-        return True
+            response = "```added user```"
+        else:
+            response = "```invalid date```"
+        return response
 
 
 intents = discord.Intents.default()
