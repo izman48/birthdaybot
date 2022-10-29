@@ -9,17 +9,17 @@
 # pylint:disable=invalid-name
 # pylint:disable=unspecified-encoding
 # pylint:disable=assigning-non-slot
+# pylint:disable=redefined-builtin
 
 import os
 import json
 from datetime import date as dt
 import asyncio
 from contextlib import suppress
+from typing import Optional
 import discord
-from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
-from typing import Optional
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -46,6 +46,15 @@ class BirthdayBot(discord.Client):
         self.is_started = False
         # self.time = REST_TIME
         self.time = 10
+
+    def get_help_message(self):
+        return """
+        ```Possible slash commands are add and remove. Ex. /add today izman48. Remove is admin only.
+        You can also use discord messages. Ex. @bBot add @izman48 19/06, @bBot remove @izman48.
+        Other Commands are:
+            @bBot list: List all users in list.
+            @bBot wish: Manually ask the bot to wish everyone who has birthdays today.
+        ```"""
 
     def birthday_exists_check(self, author_id):
         value = any(x["discordID"] == author_id for x in self.birthdays)
@@ -194,7 +203,7 @@ class BirthdayBot(discord.Client):
                         response = f"```{birthdays}```"
 
                 if len(words) == 2 and words[1] == "help":
-                    response = "```Possible commands are add and remove. Ex. @bBot add @izman48 19/06, @bBot remove @izman48```"
+                    response = self.get_help_message()
 
                 if len(words) == 3 and words[1] == "add":
                     if self.birthday_exists_check(author.id):
@@ -261,6 +270,15 @@ async def remove(interaction: discord.Interaction, user: discord.User):
         response = "Invalid command"
         print(exc)
     await interaction.response.send_message(f"{response}", ephemeral=True)
+
+
+@bBot.tree.command(description="Help message (all the available commands)")
+async def help(interaction: discord.Interaction):
+    help_message = bBot.get_help_message()
+    await interaction.response.send_message(
+        help_message,
+        ephemeral=True,
+    )
 
 
 bBot.run(TOKEN)
