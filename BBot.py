@@ -40,6 +40,7 @@ class BirthdayBot(commands.Bot):
     def birthday_exists_check(self, author):
         value = any(x["discordID"] == author for x in self.birthdays)
         print(value, self.birthdays)
+        return value
 
     def check_admin(self, author):
         role_ids = (str(role.id) for role in author.roles)
@@ -60,6 +61,9 @@ class BirthdayBot(commands.Bot):
 
     def remove_birthday(self, discordID):
         temp = self.birthdays
+        t2 = not self.birthday_exists_check(discordID)
+        print(t2)
+        # breakpoint()
         if not self.birthday_exists_check(discordID):
             return f"```Can't find user with id: {discordID}```"
 
@@ -95,14 +99,17 @@ class BirthdayBot(commands.Bot):
         numbers = date.split("/")
         return len(numbers) == 2 and int(numbers[0]) <= 31 or int(numbers[1]) <= 12
 
-    async def on_ready(self):
-        print(f"{self.user.display_name} has connected to Discord!")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.birthdays = []
         self.initialize_birthdays()
         self._loop = None
         self.is_started = False
         # self.time = REST_TIME
         self.time = 10
+
+    async def on_ready(self):
+        print(f"{self.user.display_name} has connected to Discord!")
         self.guild = discord.utils.get(self.guilds, name=GUILD)
         self.birthday_role = [
             role for role in self.guild.roles if role.id == BIRTHDAY_ROLE
@@ -184,6 +191,12 @@ class BirthdayBot(commands.Bot):
                     if len(words) == 3 and words[1] == "remove":
                         person = str(next(mentions))
                         response = self.remove_birthday(person)
+
+                    if len(words) == 2 and words[1] == "list":
+                        birthdays = ",".join(
+                            [str(x["discordID"]) for x in self.birthdays]
+                        )
+                        response = f"```{birthdays}```"
 
                 if len(words) == 2 and words[1] == "help":
                     response = "```Possible commands are add and remove. Ex. @bBot add @izman48 19/06, @bBot remove @izman48```"
