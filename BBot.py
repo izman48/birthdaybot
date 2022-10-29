@@ -44,8 +44,8 @@ class BirthdayBot(discord.Client):
         self.initialize_birthdays()
         self._loop = None
         self.is_started = False
-        # self.time = REST_TIME
-        self.time = 10
+        self.time = REST_TIME
+        # self.time = 10
 
     def get_help_message(self):
         return """
