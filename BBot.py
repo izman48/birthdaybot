@@ -200,9 +200,13 @@ class BirthdayBot(discord.Client):
 
                     if len(words) == 2 and words[1] == "list":
                         birthdays = ",".join(
-                            [str(x["discordID"]) for x in self.birthdays]
+                            [f'{x["discordID"]}|{x["date"]}' for x in self.birthdays]
                         )
                         response = f"```{birthdays}```"
+
+                    if len(words) == 2 and words[1] == "wish":
+                        await self.birthday_check()
+                        return
 
                 if len(words) == 2 and words[1] == "help":
                     response = self.get_help_message()
@@ -218,10 +222,6 @@ class BirthdayBot(discord.Client):
 
                 if len(words) == 2 and words[1] == "remove":
                     response = "```How did you get your birthday wrong? Get an admin to remove for you```"
-
-                if len(words) == 2 and words[1] == "wish":
-                    await self.birthday_check()
-                    return
                 if response:
                     await message.channel.send(response)
         except Exception as exc:
@@ -233,7 +233,7 @@ intents.members = True
 bBot = BirthdayBot(intents=intents)
 
 
-@bBot.tree.command()
+@bBot.tree.command(description="Add user to birthday list")
 @app_commands.describe(
     user="user who we add the bday to",
     date="The date for you birthday in day/month format, ex: 19/06",
@@ -241,7 +241,7 @@ bBot = BirthdayBot(intents=intents)
 async def add(
     interaction: discord.Interaction, date: str, user: Optional[discord.User] = None
 ):
-    """Adds two numbers together."""
+    """Add user to birthday list"""
     try:
         if user is not None:
             if bBot.check_admin(interaction.user):
@@ -257,7 +257,9 @@ async def add(
     await interaction.response.send_message(f"{response}", ephemeral=True)
 
 
-@bBot.tree.command()
+@bBot.tree.command(
+    description="Who do you wanna remove from the birthday list (admin only)"
+)
 @app_commands.describe(
     user="Who do you wanna remove from the birthday list",
 )
@@ -274,7 +276,7 @@ async def remove(interaction: discord.Interaction, user: discord.User):
     await interaction.response.send_message(f"{response}", ephemeral=True)
 
 
-@bBot.tree.command(description="Help message (all the available commands)")
+@bBot.tree.command(description="Help message (show all the available commands)")
 async def help(interaction: discord.Interaction):
     help_message = bBot.get_help_message()
     await interaction.response.send_message(
