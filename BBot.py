@@ -146,14 +146,16 @@ class BirthdayBot(discord.Client):
             self._task = asyncio.ensure_future(self._run())
 
     async def _run(self):
+        await self.birthday_check()
         while True:
-
             now = datetime.now()
             current_time = now.strftime("%H:%M:%S")
             if current_time == "00:00:01":
                 self.write_to_file(BIRTHDAY_FILE)
                 await self.birthday_check()
-                await asyncio.sleep(10)
+                await asyncio.sleep(self.time)
+            else:
+                await asyncio.sleep(1)
 
     async def birthday_check(self):
         for member in self.guild.members:
