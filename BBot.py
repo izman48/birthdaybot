@@ -14,6 +14,7 @@
 import os
 import json
 from datetime import date as dt
+from datetime import datetime
 import asyncio
 from contextlib import suppress
 from typing import Optional
@@ -146,9 +147,13 @@ class BirthdayBot(discord.Client):
 
     async def _run(self):
         while True:
-            self.write_to_file(BIRTHDAY_FILE)
-            await self.birthday_check()
-            await asyncio.sleep(self.time)
+
+            now = datetime.now()
+            current_time = now.strftime("%H:%M:%S")
+            if current_time == "00:00:01":
+                self.write_to_file(BIRTHDAY_FILE)
+                await self.birthday_check()
+                await asyncio.sleep(10)
 
     async def birthday_check(self):
         for member in self.guild.members:
