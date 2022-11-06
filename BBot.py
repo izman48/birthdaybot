@@ -1,4 +1,4 @@
-# bot.py
+# bBot.py
 # pylint:disable=missing-module-docstring
 # pylint:disable=line-too-long
 # pylint:disable=missing-class-docstring
@@ -25,13 +25,14 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD = os.getenv("DISCORD_GUILD")
+GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 S_USERS = json.loads(os.environ["AUTHORIZED_USERS"])
 S_ROLES = json.loads(os.environ["AUTHORIZED_ROLES"])
 BIRTHDAY_FILE = os.getenv("BIRTHDAY_FILE_NAME")
 BIRTHDAY_CHANNEL = int(os.getenv("BIRTHDAY_WISH_CHANNEL"))
 BIRTHDAY_ROLE = int(os.getenv("BIRTHDAY_ROLE"))
 REST_TIME = int(os.getenv("RESET_TIME"))
-MY_GUILD = discord.Object(id=653693334229090304)
+MY_GUILD = discord.Object(id=GUILD_ID)
 
 
 class BirthdayBot(discord.Client):
@@ -153,7 +154,7 @@ class BirthdayBot(discord.Client):
             if current_time == "00:00:01":
                 self.write_to_file(BIRTHDAY_FILE)
                 await self.birthday_check()
-                await asyncio.sleep(self.time)
+                await asyncio.sleep(self.time - 5)
             else:
                 await asyncio.sleep(1)
 
