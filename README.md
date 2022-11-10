@@ -1,5 +1,13 @@
 # Readme
 
+## Run 
+
+Build:
+` docker build --tag bbot-docker .`
+
+Run:
+` docker run -d bbot-docker`
+
 ## How it works
 
 - BBot.py uses the .env file to get important info such as which roles/users it considers important (Super roles/users), the server it is on, the channel it sends the "happy birthday" message to etc.  
