@@ -44,13 +44,13 @@ class BirthdayBot(discord.Client):
         self._loop = None
         self.is_started = False
         self.time = REST_TIME
-        # self.time = 10
 
     def get_help_message(self):
         return """
-        ```Possible slash commands are add and remove. Ex. /add today izman48. Remove is admin only.
-        You can also use discord messages. Ex. @bBot add @izman48 19/06, @bBot remove @izman48.
-        Other Commands are:
+        ```
+        Add birthdays using \add <date>, with date being in day/month format. Ex: add 19/06. 
+        Other Admin commands are:
+            @bBot remove <user>: remove user from list
             @bBot list: List all users in list.
             @bBot wish: Manually ask the bot to wish everyone who has birthdays today.
         ```"""
@@ -70,6 +70,7 @@ class BirthdayBot(discord.Client):
             if self.birthday_exists_check(user_id):
                 return "```User already in birthday list```"
             self.birthdays.append({"discordID": user_id, "date": date})
+            self.write_to_file(BIRTHDAY_FILE)
 
             response = f"```added user with id {user_id}```"
         else:
@@ -147,12 +148,12 @@ class BirthdayBot(discord.Client):
             self._task = asyncio.ensure_future(self._run())
 
     async def _run(self):
-        await self.birthday_check()
         while True:
             now = datetime.now()
-            current_time = now.strftime("%H:%M:%S")
-            if current_time == "00:00:01":
-                self.write_to_file(BIRTHDAY_FILE)
+            start_of_day = datetime(
+                year=now.year, month=now.month, day=now.day, hour=1, second=0
+            )
+            if now < start_of_day:
                 await self.birthday_check()
                 await asyncio.sleep(self.time - 5)
             else:
@@ -160,7 +161,10 @@ class BirthdayBot(discord.Client):
 
     async def birthday_check(self):
         for member in self.guild.members:
-            await member.remove_roles(self.birthday_role)
+            try:
+                await member.remove_roles(self.birthday_role)
+            except Exception as exc:
+                print(exc)
 
         today = dt.today().strftime("%d/%m")
         channel = self.get_channel(BIRTHDAY_CHANNEL)
@@ -169,11 +173,13 @@ class BirthdayBot(discord.Client):
             item["discordID"] for item in self.birthdays if item["date"] == today
         ]
         for bChild in birthday_child:
-            # print(bChild)
             response = f"@happy <@&{self.birthday_role.id}> <@!{bChild}>"
             await channel.send(response)
             member = self.guild.get_member(int(bChild))
-            await member.add_roles(self.birthday_role)
+            try:
+                await member.add_roles(self.birthday_role)
+            except Exception as exc:
+                print(exc)
 
     async def on_message(self, message):
         author = message.author
@@ -288,4 +294,7 @@ async def help(interaction: discord.Interaction):
     )
 
 
-bBot.run(TOKEN)
+try:
+    bBot.run(TOKEN)
+except Exception as exc:
+    print(exc)
