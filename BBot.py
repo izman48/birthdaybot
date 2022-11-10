@@ -48,7 +48,7 @@ class BirthdayBot(discord.Client):
     def get_help_message(self):
         return """
         ```
-        Add birthdays using \add <date>, with date being in day/month format. Ex: add 19/06. 
+        Add birthdays using /add <date>, with date being in day/month format. Ex: add 19/06. 
         Other Admin commands are:
             @bBot remove <user>: remove user from list
             @bBot list: List all users in list.
