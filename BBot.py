@@ -85,6 +85,7 @@ class BirthdayBot(discord.Client):
         self.birthdays = [
             birthday for birthday in temp if birthday["discordID"] != discordID
         ]
+        self.write_to_file(BIRTHDAY_FILE)
         return f"```removed {discordID} from birthday file```"
 
     def read_from_file(self, filename):
@@ -160,7 +161,7 @@ class BirthdayBot(discord.Client):
                 await asyncio.sleep(1)
 
     async def birthday_check(self):
-        for member in self.guild.members:
+        for member in self.birthday_role.members:
             try:
                 await member.remove_roles(self.birthday_role)
             except Exception as exc:
